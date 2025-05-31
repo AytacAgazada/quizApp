@@ -1,1 +1,32 @@
-spring.application.name=quizApp
+spring:
+  application:
+    name: quizApp
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/quiz_app
+    username: postgres
+    password: 16032005
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 500
+      minimum-idle: 10
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+      format_sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+server:
+  port: 8081
