@@ -30,7 +30,10 @@ public class QuizController {
     public ResponseEntity<UploadPdfResponse> uploadPdf(@RequestParam("file") MultipartFile file) {
         try {
             PdfDocument pdfDocument = storageService.storePdf(file);
-            return ResponseEntity.ok(new UploadPdfResponse("PDF uploaded and processed successfully!", pdfDocument.getSubject(), pdfDocument.getId()));
+            return ResponseEntity.ok(new UploadPdfResponse(
+                    "PDF uploaded and processed successfully!",
+                    pdfDocument.getSubject(),
+                    pdfDocument.getId()));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new UploadPdfResponse("Failed to upload and process PDF: " + e.getMessage(), null, null));
@@ -48,10 +51,15 @@ public class QuizController {
     @PostMapping("/generate")
     public ResponseEntity<List<Question>> generateQuiz(@RequestBody QuizConfigDto quizConfig) {
         try {
-            List<Question> questions = quizService.generateQuiz(quizConfig.getSubject(), quizConfig.getNumberOfQuestions());
+            List<Question> questions = quizService.generateQuiz(
+                    quizConfig.getSubject(),
+                    quizConfig.getNumberOfQuestions(),
+                    quizConfig.getStartIndex(),
+                    quizConfig.getEndIndex()
+            );
             return ResponseEntity.ok(questions);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(null); // Or a custom error DTO
+            return ResponseEntity.badRequest().body(null);
         }
     }
 

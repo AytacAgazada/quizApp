@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="az">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz App - Main Page</title>
+    <title>Quiz App - Başlanğıc</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -113,12 +113,9 @@
     async function fetchSubjects() {
         try {
             const response = await fetch('http://localhost:8081/api/quiz/subjects');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
             const subjects = await response.json();
             const subjectSelect = document.getElementById('subjectSelect');
-            subjectSelect.innerHTML = '<option value="">Fənn seçin...</option>'; // Clear existing options
+            subjectSelect.innerHTML = '<option value="">Fənn seçin...</option>';
             subjects.forEach(subject => {
                 const option = document.createElement('option');
                 option.value = subject;
@@ -126,21 +123,20 @@
                 subjectSelect.appendChild(option);
             });
         } catch (error) {
-            console.error('Fənləri yükləməkdə xəta baş verdi:', error);
-            alert('Fənləri yükləməkdə xəta baş verdi. Zəhmət olmasa serverin işlədiyinə əmin olun.');
+            alert('Fənləri yükləməkdə xəta baş verdi.');
         }
     }
 
     async function uploadPdf() {
         const pdfFile = document.getElementById('pdfFile').files[0];
-        const pdfUploadError = document.getElementById('pdfUploadError');
-        const pdfUploadSuccess = document.getElementById('pdfUploadSuccess');
-        pdfUploadError.style.display = 'none';
-        pdfUploadSuccess.style.display = 'none';
+        const errorDiv = document.getElementById('pdfUploadError');
+        const successDiv = document.getElementById('pdfUploadSuccess');
+        errorDiv.style.display = 'none';
+        successDiv.style.display = 'none';
 
         if (!pdfFile) {
-            pdfUploadError.textContent = 'Zəhmət olmasa bir PDF faylı seçin.';
-            pdfUploadError.style.display = 'block';
+            errorDiv.textContent = 'Zəhmət olmasa PDF seçin.';
+            errorDiv.style.display = 'block';
             return;
         }
 
@@ -148,85 +144,59 @@
         formData.append('file', pdfFile);
 
         try {
-            const response = await fetch('http://localhost:8081/api/quiz/upload-pdf', {
+            const res = await fetch('http://localhost:8081/api/quiz/upload-pdf', {
                 method: 'POST',
                 body: formData
             });
+            const data = await res.json();
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                pdfUploadError.textContent = `Yükləmə uğursuz oldu: ${data.message || 'Server xətası'}`;
-                pdfUploadError.style.display = 'block';
+            if (!res.ok) {
+                errorDiv.textContent = data.message || 'Yükləmə uğursuz oldu.';
+                errorDiv.style.display = 'block';
             } else {
-                pdfUploadSuccess.textContent = `PDF uğurla yükləndi. Fənn: "${data.subject}"`;
-                pdfUploadSuccess.style.display = 'block';
-                fetchSubjects(); // Refresh subjects list after upload
+                successDiv.textContent = `PDF yükləndi. Fənn: ${data.subject}`;
+                successDiv.style.display = 'block';
+                fetchSubjects();
             }
-        } catch (error) {
-            console.error('PDF yüklənməkdə xəta:', error);
-            pdfUploadError.textContent = 'PDF yüklənməkdə gözlənilməz xəta baş verdi.';
-            pdfUploadError.style.display = 'block';
+        } catch (e) {
+            errorDiv.textContent = 'Xəta baş verdi.';
+            errorDiv.style.display = 'block';
         }
     }
 
     async function startQuiz() {
-        const userName = document.getElementById('userName').value;
-        const entryScore = document.getElementById('entryScore').value;
-        const subject = document.getElementById('subjectSelect').value;
-        const numberOfQuestions = document.getElementById('numberOfQuestions').value;
-        const startQuestionNumber = document.getElementById('startQuestionNumber').value; // Yeni
-        const endQuestionNumber = document.getElementById('endQuestionNumber').value;     // Yeni
-        const subjectError = document.getElementById('subjectError');
-
-        subjectError.style.display = 'none'; // Hide previous errors
-
-        if (!userName || !subject || !numberOfQuestions) {
-            alert('Zəhmət olmasa bütün sahələri doldurun.');
-            if (!subject) {
-                subjectError.style.display = 'block';
-            }
-            return;
-        }
-
-        // Validate question range if provided
-        if (parseInt(startQuestionNumber) > 0 && parseInt(endQuestionNumber) > 0 && parseInt(startQuestionNumber) > parseInt(endQuestionNumber)) {
-            alert('Sual aralığının başlanğıcı sondan böyük ola bilməz.');
-            return;
-        }
-
-        const quizConfig = {
-            userName: userName,
-            entryScore: parseInt(entryScore),
-            subject: subject,
-            numberOfQuestions: parseInt(numberOfQuestions),
-            startQuestionNumber: parseInt(startQuestionNumber), // Yeni
-            endQuestionNumber: parseInt(endQuestionNumber)       // Yeni
+        const config = {
+            userName: document.getElementById('userName').value,
+            entryScore: parseInt(document.getElementById('entryScore').value),
+            subject: document.getElementById('subjectSelect').value,
+            numberOfQuestions: parseInt(document.getElementById('numberOfQuestions').value),
+            startQuestionNumber: parseInt(document.getElementById('startQuestionNumber').value),
+            endQuestionNumber: parseInt(document.getElementById('endQuestionNumber').value)
         };
 
-        try {
-            const response = await fetch('http://localhost:8081/api/quiz/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(quizConfig)
-            });
+        if (!config.userName || !config.subject) {
+            alert('Bütün sahələri doldurun.');
+            return;
+        }
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Quiz hazırlamaq uğursuz oldu');
+        try {
+            const res = await fetch('http://localhost:8081/api/quiz/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+            const data = await res.json();
+
+            if (!res.ok || !Array.isArray(data) || data.length === 0) {
+                alert(data.message || "Quiz tapılmadı.");
+                return;
             }
 
-            const questions = await response.json();
-
-            localStorage.setItem('quizQuestions', JSON.stringify(questions));
-            localStorage.setItem('quizUserName', userName);
-            window.location.href = 'quiz.html';
-
-        } catch (error) {
-            console.error('Quiz başlamaqda xəta:', error);
-            alert(`Quiz başlamaq mümkün olmadı: ${error.message}. Zəhmət olmasa fənnin mövcud olduğuna və sual sayının kifayət olduğuna əmin olun.`);
+            localStorage.setItem("quizQuestions", JSON.stringify(data));
+            localStorage.setItem("quizUserName", config.userName);
+            window.location.href = "quiz.html";
+        } catch (e) {
+            alert("Quiz başlamaqda xəta baş verdi.");
         }
     }
 </script>

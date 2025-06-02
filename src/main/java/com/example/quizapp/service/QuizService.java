@@ -3,8 +3,8 @@ package com.example.quizapp.service;
 import com.example.quizapp.model.dto.QuizAttemptDto;
 import com.example.quizapp.model.dto.QuizResultDto;
 import com.example.quizapp.model.entity.Option;
-import com.example.quizapp.model.entity.Question;
 import com.example.quizapp.model.entity.PdfDocument;
+import com.example.quizapp.model.entity.Question;
 import com.example.quizapp.repository.PdfDocumentRepository;
 import com.example.quizapp.repository.QuestionRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +21,7 @@ public class QuizService {
     private final PdfDocumentRepository pdfDocumentRepository;
 
     @Transactional(readOnly = true)
-    public List<Question> generateQuiz(String subject, int numberOfQuestions) {
+    public List<Question> generateQuiz(String subject, int numberOfQuestions, int startIndex, int endIndex) {
         Optional<PdfDocument> pdfDocumentOptional = pdfDocumentRepository.findBySubject(subject);
         if (pdfDocumentOptional.isEmpty()) {
             throw new IllegalArgumentException("Subject not found: " + subject);
@@ -29,18 +29,19 @@ public class QuizService {
 
         List<Question> allQuestions = questionRepository.findByPdfDocumentId(pdfDocumentOptional.get().getId());
 
-        if (allQuestions.size() < numberOfQuestions) {
-            // If not enough questions, return all available questions
-            Collections.shuffle(allQuestions);
-            return allQuestions;
+        // Aralığın düzgünlüyünü yoxla
+        if (startIndex < 0 || endIndex > allQuestions.size() || startIndex >= endIndex) {
+            throw new IllegalArgumentException("Invalid question range.");
         }
 
-        Collections.shuffle(allQuestions); // Randomize all questions
-        List<Question> selectedQuestions = allQuestions.subList(0, numberOfQuestions);
+        List<Question> rangedQuestions = allQuestions.subList(startIndex, endIndex);
+        Collections.shuffle(rangedQuestions);
 
-        // Randomize options for each selected question
-        selectedQuestions.forEach(question -> Collections.shuffle(question.getOptions()));
+        // Sorğu sayını aşmamaq üçün limit qoy
+        int limit = Math.min(numberOfQuestions, rangedQuestions.size());
+        List<Question> selectedQuestions = rangedQuestions.subList(0, limit);
 
+        selectedQuestions.forEach(q -> Collections.shuffle(q.getOptions()));
         return selectedQuestions;
     }
 
@@ -67,7 +68,9 @@ public class QuizService {
                             " (Correct answer: " +
                             question.getOptions().stream()
                                     .filter(Option::isCorrect)
-                                    .findFirst().map(Option::getOptionText).orElse("N/A") + ")");
+                                    .findFirst()
+                                    .map(Option::getOptionText)
+                                    .orElse("N/A") + ")");
                 }
             }
         }
