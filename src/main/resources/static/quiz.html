@@ -2,6 +2,7 @@
 <html lang="az">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Quiz</title>
   <style>
     body { font-family: Arial, sans-serif; background: #f9f9f9; padding: 20px; }
@@ -27,11 +28,47 @@
       border: none;
       border-radius: 4px;
       cursor: pointer;
+      margin-top: 20px;
     }
     button:hover {
       background: #0056b3;
     }
-    .result { margin-top: 20px; font-weight: bold; }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .result-section {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #eee;
+    }
+    .result-section h2 {
+      text-align: center;
+      color: #007bff;
+    }
+    .result-text {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .message {
+      font-size: 1.1em;
+      text-align: center;
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 5px;
+    }
+    .message.positive { background-color: #d4edda; color: #155724; }
+    .message.neutral { background-color: #fff3cd; color: #856404; }
+    .message.negative { background-color: #f8d7da; color: #721c24; }
+    .incorrect-questions {
+      margin-top: 20px;
+      border-top: 1px solid #eee;
+      padding-top: 15px;
+    }
+    .incorrect-questions h4 { margin-bottom: 10px; color: #dc3545; }
+    .incorrect-questions ul { list-style-type: none; padding: 0; }
+    .incorrect-questions li { margin-bottom: 5px; color: #555; }
     .warning {
       color: red;
       font-weight: bold;
@@ -45,19 +82,33 @@
   <h1>Quiz Səhifəsi</h1>
   <div id="quiz"></div>
   <button onclick="submitQuiz()">Cavabları Yoxla</button>
-  <div id="result" class="result"></div>
+
+  <div id="resultSection" class="result-section" style="display: none;">
+    <h2>Nəticə</h2>
+    <div id="resultText" class="result-text"></div>
+    <div id="scoreMessage" class="message"></div>
+    <div id="incorrectQuestionsList" class="incorrect-questions">
+      <h4>Yanlış Cavablandırılmış Suallar:</h4>
+      <ul></ul>
+    </div>
+  </div>
 </div>
 
 <script>
+  const BASE_URL = 'http://localhost:8081/api/quiz';
+
   const quizData = JSON.parse(localStorage.getItem("quizQuestions") || "[]");
+  const quizConfig = JSON.parse(localStorage.getItem("quizConfig") || "{}");
   const userAnswers = new Map();
+
+  document.addEventListener("DOMContentLoaded", renderQuiz);
 
   function renderQuiz() {
     const quizDiv = document.getElementById("quiz");
     quizDiv.innerHTML = '';
 
     if (!quizData || quizData.length === 0) {
-      quizDiv.innerHTML = '<p class="warning">Sual tapılmadı. Zəhmət olmasa PDF-i düzgün yüklədiyinizdən əmin olun.</p>';
+      quizDiv.innerHTML = '<p class="warning">Sual tapılmadı. Zəhmət olmasa əvvəlki səhifədən düzgün bir quiz seçin.</p>';
       return;
     }
 
@@ -75,7 +126,9 @@
         const optionsDiv = document.createElement("div");
         optionsDiv.classList.add("options");
 
-        q.options.forEach(opt => {
+        const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5);
+
+        shuffledOptions.forEach(opt => {
           const option = document.createElement("label");
           option.innerHTML = `
             <input type="radio" name="q${q.id}" value="${opt.id}" onchange="userAnswers.set(${q.id}, ${opt.id})">
@@ -91,21 +144,99 @@
     });
   }
 
-  function submitQuiz() {
-    let correct = 0;
-    quizData.forEach(q => {
-      const selectedId = userAnswers.get(q.id);
-      const correctOption = q.options?.find(o => o.isCorrect);
-      if (selectedId && correctOption && selectedId === correctOption.id) {
-        correct++;
-      }
+  async function submitQuiz() {
+    if (quizData.length === 0) {
+      alert("Cavab yoxlamaq üçün sual yoxdur.");
+      return;
+    }
+
+    const answersMap = {};
+    userAnswers.forEach((value, key) => {
+      answersMap[key] = value;
     });
 
-    const resultDiv = document.getElementById("result");
-    resultDiv.textContent = `Sizin nəticəniz: ${correct} / ${quizData.length}`;
+    const quizAttempt = {
+      userName: quizConfig.userName,
+      answers: answersMap
+    };
+
+    try {
+      const res = await fetch(`${BASE_URL}/submit?initialScore=${quizConfig.entryScore}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quizAttempt)
+      });
+      const resultData = await res.json();
+
+      if (!res.ok) {
+        alert(resultData.message || 'Cavablar yoxlanarkən xəta baş verdi.');
+        return;
+      }
+
+      displayResult(resultData);
+
+    } catch (e) {
+      console.error("Cavabları yoxlamaqda xəta baş verdi:", e);
+      alert("Cavabları yoxlamaqda xəta baş verdi. Konsolu yoxlayın.");
+    }
   }
 
-  document.addEventListener("DOMContentLoaded", renderQuiz);
+  function displayResult(result) {
+    const resultSection = document.getElementById("resultSection");
+    const resultText = document.getElementById("resultText");
+    const scoreMessage = document.getElementById("scoreMessage");
+    const incorrectQuestionsList = document.getElementById("incorrectQuestionsList").querySelector('ul');
+
+    resultSection.style.display = 'block';
+    resultText.textContent = `Sizin nəticəniz: ${result.correctAnswers} / ${result.totalQuestions}`;
+    resultText.innerHTML += `<br>Ümumi balınız: <b>${result.finalScore}</b>`;
+
+    scoreMessage.className = 'message';
+    let messageText = '';
+    if (result.finalScore >= 91) {
+      messageText = "Halal olsun👍 = A aldınız!";
+      scoreMessage.classList.add('positive');
+    } else if (result.finalScore >= 81) {
+      messageText = "Təbriklər🎉 = B aldınız!";
+      scoreMessage.classList.add('positive');
+    } else if (result.finalScore >= 71) {
+      messageText = "Gözəl🌞 = C aldınız!";
+      scoreMessage.classList.add('neutral');
+    } else if (result.finalScore >= 51) {
+      messageText = "Buna da şükür🥲 = D aldınız!";
+      scoreMessage.classList.add('neutral');
+    } else {
+      messageText = "Balınız 50-dən aşağıdır👎. Təkrarla!😭";
+      scoreMessage.classList.add('negative');
+    }
+    scoreMessage.textContent = messageText;
+
+    incorrectQuestionsList.innerHTML = ''; // Əvvəlki siyahını təmizlə
+
+    // Yanlış cavablandırılmış sualları göstəririk
+    if (result.incorrectQuestions && result.incorrectQuestions.length > 0) {
+      // Hissəni göstəririk
+      document.getElementById("incorrectQuestionsList").style.display = 'block';
+      result.incorrectQuestions.forEach(qText => {
+        const li = document.createElement('li');
+        li.textContent = qText;
+        incorrectQuestionsList.appendChild(li);
+      });
+    } else {
+      // Əgər səhv sual yoxdursa, yanlış suallar hissəsini gizlədirik
+      document.getElementById("incorrectQuestionsList").style.display = 'none';
+      // Və scoreMessage hissəsində xüsusi bir təbrik mesajı əlavə edə bilərik
+      // (əgər hələ də yuxarıda bal əsasında mesaj verilməyibsə)
+      // Ya da əlavə bir div yaradıb orada da göstərə bilərsiniz
+      if (result.finalScore === 100) { // Mükəmməl bal olduqda xüsusi mesaj
+        scoreMessage.textContent += " Siz bütün sualları düzgün cavablandırdınız!";
+      } else if (result.correctAnswers === result.totalQuestions) { // Bütün cavablar düzgündürsə (amma bal 100 olmaya bilər)
+        scoreMessage.textContent += " Bütün suallar düzgün cavablandırıldı!";
+      }
+    }
+
+    document.querySelector('button').disabled = true;
+  }
 </script>
 
 </body>

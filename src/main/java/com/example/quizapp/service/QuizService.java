@@ -27,26 +27,34 @@ public class QuizService {
             throw new IllegalArgumentException("Subject not found: " + subject);
         }
 
-        List<Question> allQuestions = questionRepository.findByPdfDocumentId(pdfDocumentOptional.get().getId());
+        List<Question> allQuestionsForPdf = questionRepository.findByPdfDocumentId(pdfDocumentOptional.get().getId());
 
-        // Aralığın düzgünlüyünü yoxla
-        if (startIndex < 0 || endIndex > allQuestions.size() || startIndex >= endIndex) {
-            throw new IllegalArgumentException("Invalid question range.");
+        // Validate the range
+        if (startIndex < 0 || startIndex >= endIndex || endIndex > allQuestionsForPdf.size() || numberOfQuestions <= 0) {
+            throw new IllegalArgumentException("Invalid quiz configuration: check start/end index or number of questions.");
         }
 
-        List<Question> rangedQuestions = allQuestions.subList(startIndex, endIndex);
-        Collections.shuffle(rangedQuestions);
+        // Get questions within the specified range
+        List<Question> questionsInDesiredRange = new ArrayList<>(allQuestionsForPdf.subList(startIndex, endIndex));
 
-        // Sorğu sayını aşmamaq üçün limit qoy
-        int limit = Math.min(numberOfQuestions, rangedQuestions.size());
-        List<Question> selectedQuestions = rangedQuestions.subList(0, limit);
+        // Shuffle the questions in the desired range to randomize selection
+        Collections.shuffle(questionsInDesiredRange);
 
+        // Determine the actual number of questions to select, not exceeding the available count in the range
+        int questionsToSelect = Math.min(numberOfQuestions, questionsInDesiredRange.size());
+
+        // Select the unique questions from the shuffled list
+        List<Question> selectedQuestions = questionsInDesiredRange.subList(0, questionsToSelect);
+
+        // Shuffle options for each selected question
         selectedQuestions.forEach(q -> Collections.shuffle(q.getOptions()));
+
         return selectedQuestions;
     }
 
+    // Yeni metod: evaluateQuiz ilkin balı qəbul edir
     @Transactional(readOnly = true)
-    public QuizResultDto evaluateQuiz(QuizAttemptDto attempt) {
+    public QuizResultDto evaluateQuiz(QuizAttemptDto attempt, int initialScore) {
         int correctAnswers = 0;
         int totalQuestions = attempt.getAnswers().size();
         List<String> incorrectQuestions = new ArrayList<>();
@@ -65,7 +73,7 @@ public class QuizService {
                     correctAnswers++;
                 } else {
                     incorrectQuestions.add(question.getQuestionText() +
-                            " (Correct answer: " +
+                            " (Doğru cavab: " +
                             question.getOptions().stream()
                                     .filter(Option::isCorrect)
                                     .findFirst()
@@ -75,6 +83,18 @@ public class QuizService {
             }
         }
 
-        return new QuizResultDto(correctAnswers, totalQuestions, incorrectQuestions);
+        // Hesablamanın hər sual üçün 1 bal olduğunu fərz edək
+        // Ümumi sualların sayı 100 bal üzərindən necə hesablanacağını müəyyənləşdirmək lazımdır.
+        // Hər sualın çəkisi bərabərdirsə: (doğru cavablar / ümumi suallar) * (100 - initialScore) + initialScore
+        double scorePerQuestion = (totalQuestions > 0) ? (double) (100 - initialScore) / totalQuestions : 0;
+        int calculatedScore = (int) Math.round(correctAnswers * scorePerQuestion);
+        int finalScore = initialScore + calculatedScore;
+
+        // Balın 100-ü keçməməsini təmin edirik
+        if (finalScore > 100) {
+            finalScore = 100;
+        }
+
+        return new QuizResultDto(correctAnswers, totalQuestions, incorrectQuestions, finalScore);
     }
 }

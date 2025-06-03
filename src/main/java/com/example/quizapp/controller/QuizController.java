@@ -31,12 +31,12 @@ public class QuizController {
         try {
             PdfDocument pdfDocument = storageService.storePdf(file);
             return ResponseEntity.ok(new UploadPdfResponse(
-                    "PDF uploaded and processed successfully!",
+                    "PDF yükləndi və uğurla emal edildi!",
                     pdfDocument.getSubject(),
                     pdfDocument.getId()));
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new UploadPdfResponse("Failed to upload and process PDF: " + e.getMessage(), null, null));
+                    .body(new UploadPdfResponse("PDF yükləmə və emal uğursuz oldu: " + e.getMessage(), null, null));
         }
     }
 
@@ -64,8 +64,9 @@ public class QuizController {
     }
 
     @PostMapping("/submit")
-    public ResponseEntity<QuizResultDto> submitQuiz(@RequestBody QuizAttemptDto attempt) {
-        QuizResultDto result = quizService.evaluateQuiz(attempt);
+    public ResponseEntity<QuizResultDto> submitQuiz(@RequestBody QuizAttemptDto attempt,
+                                                    @RequestParam int initialScore) { // initialScore-u əlavə etdik
+        QuizResultDto result = quizService.evaluateQuiz(attempt, initialScore); // initialScore-u ötürürük
         return ResponseEntity.ok(result);
     }
 }

@@ -13,4 +13,5 @@ public class QuizResultDto {
     private int correctAnswers;
     private int totalQuestions;
     private List<String> incorrectQuestions;
+    private int finalScore; // Yeni əlavə olunan sahə
 }

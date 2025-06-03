@@ -53,43 +53,76 @@ public class PdfProcessorService {
 
     private List<Question> parseQuestionsFromText(String text, PdfDocument pdfDocument) {
         List<Question> questions = new ArrayList<>();
-        // Regular expression to find questions and options
-        // It looks for a number followed by a dot (e.g., "1.") for the question,
-        // and then lines starting with bullet points or similar for options.
-        // It captures the question text, then all option lines until the next question number.
-        Pattern questionPattern = Pattern.compile("(\\d+\\.\\s*)([\\s\\S]*?)(?=\\d+\\.\\s*|\\Z)");
-        Matcher questionMatcher = questionPattern.matcher(text);
+        String[] lines = text.split("\\r?\\n"); // Mətni sətirlərə ayırırıq
 
-        while (questionMatcher.find()) {
-            String fullMatch = questionMatcher.group(0);
-            int questionNumberEndIndex = questionMatcher.group(1).length();
-            String questionAndOptions = fullMatch.substring(questionNumberEndIndex).trim();
+        int i = 0;
+        while (i < lines.length) {
+            String line = lines[i].trim();
 
-            // Split question and options
-            int firstOptionIndex = findFirstOptionIndex(questionAndOptions);
-            String questionText = "";
-            String optionsText = "";
+            // Sətirin sual nömrəsi ilə (məsələn, "1.") başlayıb-başlamadığını yoxlayırıq
+            if (line.matches("^\\d+\\..*")) {
+                StringBuilder questionTextBuilder = new StringBuilder();
+                questionTextBuilder.append(line);
+                i++; // Növbəti sətrə keçirik
 
-            if (firstOptionIndex != -1) {
-                questionText = questionAndOptions.substring(0, firstOptionIndex).trim();
-                optionsText = questionAndOptions.substring(firstOptionIndex).trim();
+                // Sual mətninin davam edən sətirlərini toplayırıq
+                // Yeni sual, seçim və ya sənədin sonuna çatana qədər davam edirik
+                while (i < lines.length &&
+                        !lines[i].trim().matches("^\\d+\\..*") &&     // Yeni sualın başlanğıcı deyil
+                        !lines[i].trim().startsWith("•") &&         // Seçim işarəsi (bullet point) deyil
+                        !lines[i].trim().startsWith("√") &&         // Seçim işarəsi (checkmark) deyil
+                        !lines[i].trim().startsWith("-") &&         // Seçim işarəsi (tire) deyil
+                        !lines[i].trim().isEmpty()) {               // Boş sətir deyil
+                    String extraLine = lines[i].trim();
+                    questionTextBuilder.append(" ").append(extraLine);
+                    i++;
+                }
+
+                Question question = new Question();
+                question.setQuestionText(questionTextBuilder.toString().trim());
+                question.setPdfDocument(pdfDocument);
+
+                List<Option> options = new ArrayList<>();
+                while (i < lines.length) {
+                    String optionLine = lines[i].trim();
+                    if (optionLine.matches("^\\d+\\..*")) {
+                        break; // Növbəti sualın başlanğıcıdır
+                    }
+
+                    if (optionLine.startsWith("•") || optionLine.startsWith("√") || optionLine.startsWith("-")) {
+                        boolean isCorrect = optionLine.startsWith("√");
+                        String optionContent = optionLine.substring(1).trim();
+
+                        Option option = new Option();
+                        option.setOptionText(optionContent);
+                        option.setCorrect(isCorrect);
+                        option.setQuestion(question);
+                        options.add(option);
+                        i++;
+                    } else {
+                        // Əgər sətir seçim və ya yeni sual deyilsə, mövcud seçimin davamı ola bilər.
+                        // Lakin sadəlik üçün, indikatorla başlamayan sətirləri keçirik.
+                        break;
+                    }
+                }
+                question.setOptions(options);
+                // Seçimlər olmadan sual əlavə etməmək üçün əlavə yoxlama
+                if (!options.isEmpty()) {
+                    questions.add(question);
+                } else {
+                    System.err.println("Xəbərdarlıq: Seçimləri olmayan sual keçildi: " + question.getQuestionText());
+                }
             } else {
-                questionText = questionAndOptions.trim();
+                i++; // Sual olmayan sətirləri keçirik
             }
-
-            Question question = new Question();
-            question.setQuestionText(questionText.replaceAll("[\r\n]+", " ").trim());
-            question.setPdfDocument(pdfDocument);
-
-            List<Option> options = parseOptions(optionsText, question);
-            question.setOptions(options);
-            questions.add(question);
         }
         return questions;
     }
 
     private int findFirstOptionIndex(String text) {
-        Pattern optionStartPattern = Pattern.compile("•|√|-|\\d+\\."); // Common option starting characters
+        // Bu metod yuxarıdakı sətir əsaslı parsinq ilə artıq istifadə edilmir, lakin əvvəlki kodunuzda olduğu üçün saxlanılıb.
+        // Onu istifadə etmək lazım deyil.
+        Pattern optionStartPattern = Pattern.compile("•|√|-|\\d+\\.");
         Matcher matcher = optionStartPattern.matcher(text);
         if (matcher.find()) {
             return matcher.start();
@@ -98,12 +131,13 @@ public class PdfProcessorService {
     }
 
     private List<Option> parseOptions(String optionsText, Question question) {
+        // Bu metod yuxarıdakı sətir əsaslı parsinq ilə artıq istifadə edilmir, lakin əvvəlki kodunuzda olduğu üçün saxlanılıb.
+        // Onu istifadə etmək lazım deyil.
         List<Option> options = new ArrayList<>();
         if (optionsText.isEmpty()) {
-            return options; // No options to parse
+            return options;
         }
 
-        // Split options by lines that start with a bullet point or checkmark
         Pattern optionLinePattern = Pattern.compile("(•|√|-)\\s*(.*?)(?=\\n(?:•|√|-)|\\Z)", Pattern.DOTALL);
         Matcher optionMatcher = optionLinePattern.matcher(optionsText);
 
@@ -112,8 +146,8 @@ public class PdfProcessorService {
             String optionContent = optionMatcher.group(2).trim();
 
             Option option = new Option();
-            option.setOptionText(optionContent.replaceAll("[\r\n]+", " ").trim()); // Clean up line breaks
-            option.setCorrect("√".equals(indicator)); // If starts with √, it's correct
+            option.setOptionText(optionContent.replaceAll("[\r\n]+", " ").trim());
+            option.setCorrect("√".equals(indicator));
             option.setQuestion(question);
             options.add(option);
         }

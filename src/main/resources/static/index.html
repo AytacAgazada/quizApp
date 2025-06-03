@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz App - Başlanğıc</title>
+    <title>Quiz Tətbiqi - Başlanğıc</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -74,8 +74,8 @@
         <label for="userName">İstifadəçi Adı:</label>
         <input type="text" id="userName" placeholder="Adınızı daxil edin" required>
 
-        <label for="entryScore">Giriş Balı (isteğe bağlı):</label>
-        <input type="number" id="entryScore" value="0">
+        <label for="entryScore">Giriş Balı (0-100):</label>
+        <input type="number" id="entryScore" value="0" min="0" max="100">
 
         <label for="subjectSelect">Fənn Seçin:</label>
         <select id="subjectSelect" required>
@@ -87,10 +87,10 @@
         <input type="number" id="numberOfQuestions" min="1" value="10" required>
 
         <label for="startQuestionNumber">Sual Aralığı Başlanğıcı (isteğe bağlı):</label>
-        <input type="number" id="startQuestionNumber" min="1" value="0">
+        <input type="number" id="startQuestionNumber" min="0" value="0">
 
         <label for="endQuestionNumber">Sual Aralığı Sonu (isteğe bağlı):</label>
-        <input type="number" id="endQuestionNumber" min="1" value="0">
+        <input type="number" id="endQuestionNumber" min="0" value="0">
 
         <button onclick="startQuiz()">Quiz Başla</button>
     </div>
@@ -108,11 +108,16 @@
 </div>
 
 <script>
+    const BASE_URL = 'http://localhost:8081/api/quiz';
+
     document.addEventListener('DOMContentLoaded', fetchSubjects);
 
     async function fetchSubjects() {
         try {
-            const response = await fetch('http://localhost:8081/api/quiz/subjects');
+            const response = await fetch(`${BASE_URL}/subjects`);
+            if (!response.ok) {
+                throw new Error(`HTTP xətası! Status: ${response.status}`);
+            }
             const subjects = await response.json();
             const subjectSelect = document.getElementById('subjectSelect');
             subjectSelect.innerHTML = '<option value="">Fənn seçin...</option>';
@@ -123,7 +128,8 @@
                 subjectSelect.appendChild(option);
             });
         } catch (error) {
-            alert('Fənləri yükləməkdə xəta baş verdi.');
+            console.error('Fənləri yükləməkdə xəta baş verdi:', error);
+            alert('Fənləri yükləməkdə xəta baş verdi. Konsolu yoxlayın.');
         }
     }
 
@@ -144,7 +150,7 @@
         formData.append('file', pdfFile);
 
         try {
-            const res = await fetch('http://localhost:8081/api/quiz/upload-pdf', {
+            const res = await fetch(`${BASE_URL}/upload-pdf`, {
                 method: 'POST',
                 body: formData
             });
@@ -159,44 +165,68 @@
                 fetchSubjects();
             }
         } catch (e) {
-            errorDiv.textContent = 'Xəta baş verdi.';
+            console.error('PDF yükləmə xətası:', e);
+            errorDiv.textContent = 'Xəta baş verdi. Konsolu yoxlayın.';
             errorDiv.style.display = 'block';
         }
     }
 
     async function startQuiz() {
-        const config = {
-            userName: document.getElementById('userName').value,
-            entryScore: parseInt(document.getElementById('entryScore').value),
-            subject: document.getElementById('subjectSelect').value,
-            numberOfQuestions: parseInt(document.getElementById('numberOfQuestions').value),
-            startQuestionNumber: parseInt(document.getElementById('startQuestionNumber').value),
-            endQuestionNumber: parseInt(document.getElementById('endQuestionNumber').value)
-        };
+        const userName = document.getElementById('userName').value.trim();
+        const entryScore = parseInt(document.getElementById('entryScore').value);
+        const subject = document.getElementById('subjectSelect').value;
+        const numberOfQuestions = parseInt(document.getElementById('numberOfQuestions').value);
+        const startQuestionNumber = parseInt(document.getElementById('startQuestionNumber').value);
+        const endQuestionNumber = parseInt(document.getElementById('endQuestionNumber').value);
 
-        if (!config.userName || !config.subject) {
-            alert('Bütün sahələri doldurun.');
+        if (!userName) {
+            alert('Xahiş edirik istifadəçi adınızı daxil edin.');
+            return;
+        }
+        if (!subject) {
+            document.getElementById('subjectError').style.display = 'block';
+            return;
+        } else {
+            document.getElementById('subjectError').style.display = 'none';
+        }
+        if (isNaN(numberOfQuestions) || numberOfQuestions <= 0) {
+            alert('Xahiş edirik sual sayını düzgün daxil edin.');
+            return;
+        }
+        if (startQuestionNumber > 0 && endQuestionNumber > 0 && startQuestionNumber >= endQuestionNumber) {
+            alert('Sual aralığı başlanğıcı sual aralığı sonundan kiçik olmalıdır.');
             return;
         }
 
+        const quizConfig = {
+            userName: userName,
+            entryScore: entryScore,
+            subject: subject,
+            numberOfQuestions: numberOfQuestions,
+            startIndex: startQuestionNumber,
+            endIndex: endQuestionNumber
+        };
+
         try {
-            const res = await fetch('http://localhost:8081/api/quiz/generate', {
+            const res = await fetch(`${BASE_URL}/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
+                body: JSON.stringify(quizConfig)
             });
             const data = await res.json();
 
             if (!res.ok || !Array.isArray(data) || data.length === 0) {
-                alert(data.message || "Quiz tapılmadı.");
+                alert(data.message || "Sual tapılmadı. Zəhmət olmasa konfiqurasiyanı yoxlayın.");
                 return;
             }
 
             localStorage.setItem("quizQuestions", JSON.stringify(data));
-            localStorage.setItem("quizUserName", config.userName);
+            localStorage.setItem("quizConfig", JSON.stringify(quizConfig));
+
             window.location.href = "quiz.html";
         } catch (e) {
-            alert("Quiz başlamaqda xəta baş verdi.");
+            console.error("Quiz başlamaqda xəta baş verdi:", e);
+            alert("Quiz başlamaqda xəta baş verdi. Konsolu yoxlayın.");
         }
     }
 </script>
